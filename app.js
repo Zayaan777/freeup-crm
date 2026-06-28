@@ -628,6 +628,17 @@ function Settings({ settings, setSettings }) {
 }
 
 // ---------- App Root ----------
+function parseLeadsCSV(text) {
+  const lines = text.trim().split('\n').filter(Boolean);
+  const headers = lines[0].split(',').map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const cells = line.split(',').map(c => c.trim());
+    const row = {};
+    headers.forEach((h, i) => row[h] = cells[i] || '');
+    return row;
+  });
+}
+
 function App() {
   const init = loadData();
   const [page, setPage] = useState('dashboard');
@@ -643,6 +654,35 @@ function App() {
     const next = [{ id: uid(), text, time: new Date().toISOString().slice(0, 10) }, ...activity].slice(0, 20);
     setActivityState(next); saveActivity(next);
   }
+
+  useEffect(() => {
+    fetch('./leads.csv')
+      .then(r => r.ok ? r.text() : null)
+      .then(text => {
+        if (!text) return;
+        const rows = parseLeadsCSV(text);
+        const existingNames = new Set(clients.map(c => c.name.toLowerCase()));
+        const newClients = rows
+          .filter(r => r.name && !existingNames.has(r.name.toLowerCase()))
+          .map(r => ({
+            id: uid(),
+            name: r.name,
+            email: r.email || '',
+            phone: r.phone || '',
+            service: r.service || SERVICES[0],
+            amount: Number(r.amount) || 0,
+            status: r.status || 'Prospect',
+            date: new Date().toISOString().slice(0, 10),
+            notes: r.notes || '',
+          }));
+        if (newClients.length) {
+          const merged = [...newClients, ...clients];
+          setClients(merged);
+          newClients.forEach(c => addActivity(`Added new client from leads sheet: ${c.name}`));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="flex">
