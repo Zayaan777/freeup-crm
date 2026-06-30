@@ -6,7 +6,7 @@ const STORAGE_KEYS = {
   settings: 'freeup_settings',
 };
 
-const SERVICES = ['Workflow Automation', 'AI Chatbot Setup', 'CRM Integration', 'Email Automation', 'Lead Gen Automation', 'Reporting Dashboard'];
+const SERVICES = ['Workflow Automation', 'AI Chatbot Setup', 'CRM Integration', 'Email Automation', 'Lead Gen Automation', 'Reporting Dashboard', 'Website'];
 const STAGES = ['Lead', 'Proposal Sent', 'Negotiation', 'Closed Won', 'Closed Lost'];
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
