@@ -1,4 +1,28 @@
 const { useState, useEffect, useMemo, useRef } = React;
+
+// ---------- GitHub sync ----------
+const GH_REPO = 'Zayaan777/freeup-crm';
+const GH_FILE = 'leads.csv';
+
+async function appendToLeadsCSV(client) {
+  const token = localStorage.getItem('freeup_gh_token');
+  if (!token) return;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
+    });
+    const data = await res.json();
+    const current = atob(data.content.replace(/\n/g, ''));
+    const notes = (client.notes || '').replace(/,/g, ';');
+    const newRow = `\n${client.name},${client.email || ''},${client.phone || ''},${client.service || ''},${client.amount || 0},${client.status || 'Prospect'},${notes}`;
+    const updated = btoa(unescape(encodeURIComponent(current + newRow)));
+    await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`, {
+      method: 'PUT',
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: `Add client: ${client.name}`, content: updated, sha: data.sha })
+    });
+  } catch(e) { console.error('GitHub sync failed', e); }
+}
 const {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
@@ -269,7 +293,7 @@ function Clients({ clients, setClients, addActivity }) {
     const exists = clients.some(x => x.id === c.id);
     let next;
     if (exists) next = clients.map(x => x.id === c.id ? c : x);
-    else { next = [c, ...clients]; addActivity(`Added new client: ${c.name}`); }
+    else { next = [c, ...clients]; addActivity(`Added new client: ${c.name}`); appendToLeadsCSV(c); }
     setClients(next);
     setModal(null);
   }
@@ -561,8 +585,13 @@ function Analytics({ clients, deals, settings }) {
 // ---------- Settings Page ----------
 function Settings({ settings, setSettings }) {
   const [form, setForm] = useState(settings);
+  const [ghToken, setGhToken] = useState(localStorage.getItem('freeup_gh_token') || '');
   const fileRef = useRef();
-  function save() { setSettings(form); }
+  function save() {
+    setSettings(form);
+    if (ghToken) localStorage.setItem('freeup_gh_token', ghToken);
+    else localStorage.removeItem('freeup_gh_token');
+  }
   function handleLogo(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -608,6 +637,11 @@ function Settings({ settings, setSettings }) {
         <div>
           <label className="text-sm font-medium text-slate-600">Email Signature Template</label>
           <textarea rows={4} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent" value={form.emailSignature} onChange={e => setForm({ ...form, emailSignature: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-slate-600">GitHub Token (for leads.csv sync)</label>
+          <p className="text-xs text-slate-400 mt-0.5">Paste your GitHub personal access token here. Stored locally in your browser only — never sent to any server except GitHub.</p>
+          <input type="password" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent font-mono" placeholder="ghp_..." value={ghToken} onChange={e => setGhToken(e.target.value)} />
         </div>
         <div className="flex items-center justify-between border-t border-slate-100 pt-4">
           <div>
