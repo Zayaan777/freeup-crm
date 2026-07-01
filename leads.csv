@@ -1,9 +1,7 @@
 name,email,phone,service,amount,status,notes
 Xquisite Blinds,,,Lead Gen Automation,0,Prospect,Blinds & shutters business in Leicester (LE5)
 Bruberry,,0116 296 9600,Website,0,Prospect,Cafe bistro on Moat Rd Leicester LE5 5EF - no website found
-
 test,tes@outlook.com,07790883456,Workflow Automation,100,Prospect,test2
 testest,testest,0123,Workflow Automation,500,Prospect,teset final
 test4,test4,01234567890,Workflow Automation,500,Prospect,test4
 console test,test@test.com,,Website,0,Prospect,debug test
-FINALtest,finaltest@outlook.com,01234567890,Workflow Automation,1000,Prospect,test5
