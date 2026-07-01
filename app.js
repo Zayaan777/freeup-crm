@@ -23,6 +23,28 @@ async function appendToLeadsCSV(client) {
     });
   } catch(e) { console.error('GitHub sync failed', e); }
 }
+
+async function removeFromLeadsCSV(clientName) {
+  const token = localStorage.getItem('freeup_gh_token');
+  if (!token) return;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
+    });
+    const data = await res.json();
+    const current = atob(data.content.replace(/\n/g, ''));
+    const filtered = current.split('\n').filter(line => {
+      const name = line.split(',')[0].trim().toLowerCase();
+      return name !== clientName.toLowerCase() && line.trim() !== '';
+    }).join('\n');
+    const updated = btoa(unescape(encodeURIComponent(filtered + '\n')));
+    await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`, {
+      method: 'PUT',
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: `Remove client: ${clientName}`, content: updated, sha: data.sha })
+    });
+  } catch(e) { console.error('GitHub sync failed', e); }
+}
 const {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
@@ -298,6 +320,8 @@ function Clients({ clients, setClients, addActivity }) {
     setModal(null);
   }
   function deleteClient(id) {
+    const client = clients.find(c => c.id === id);
+    if (client) removeFromLeadsCSV(client.name);
     setClients(clients.filter(c => c.id !== id));
     setSelected(selected.filter(s => s !== id));
   }
