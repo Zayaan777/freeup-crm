@@ -714,11 +714,21 @@ function App() {
   }
 
   useEffect(() => {
-    fetch('./leads.csv')
-      .then(r => r.ok ? r.text() : null)
-      .then(text => {
-        if (!text) return;
-        const rows = parseLeadsCSV(text);
+    const token = localStorage.getItem('freeup_gh_token');
+    const url = token
+      ? `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`
+      : `https://raw.githubusercontent.com/${GH_REPO}/main/${GH_FILE}`;
+    const headers = token
+      ? { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
+      : {};
+    fetch(url, { headers })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        const text = token ? atob(data.content.replace(/\n/g, '')) : data;
+        const rows = parseLeadsCSV(typeof text === 'string' ? text : JSON.stringify(text));
+        const csvNames = new Set(rows.filter(r => r.name).map(r => r.name.toLowerCase()));
+        // add new clients from CSV
         const existingNames = new Set(clients.map(c => c.name.toLowerCase()));
         const newClients = rows
           .filter(r => r.name && !existingNames.has(r.name.toLowerCase()))
@@ -733,8 +743,10 @@ function App() {
             date: new Date().toISOString().slice(0, 10),
             notes: r.notes || '',
           }));
-        if (newClients.length) {
-          const merged = [...newClients, ...clients];
+        // remove clients deleted from CSV (skip header row name "name")
+        const afterRemove = clients.filter(c => c.name.toLowerCase() === 'name' || csvNames.has(c.name.toLowerCase()));
+        const merged = [...newClients, ...afterRemove];
+        if (merged.length !== clients.length || newClients.length) {
           setClients(merged);
           newClients.forEach(c => addActivity(`Added new client from leads sheet: ${c.name}`));
         }
