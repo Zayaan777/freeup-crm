@@ -410,7 +410,7 @@ function Clients({ clients, setClients, addActivity }) {
 }
 
 // ---------- Deals / Pipeline Page ----------
-function DealModal({ deal, onClose, onSave, clients }) {
+function DealModal({ deal, onClose, onSave, onDelete, clients }) {
   const [form, setForm] = useState(deal || { clientId: clients[0]?.id || '', service: SERVICES[0], value: '', stage: STAGES[0], daysInStage: 0, createdAt: new Date().toISOString().slice(0, 10) });
   function clientName(id) { return clients.find(c => c.id === id)?.name || ''; }
   return (
@@ -432,9 +432,12 @@ function DealModal({ deal, onClose, onSave, clients }) {
             {STAGES.map(s => <option key={s}>{s}</option>)}
           </select>
         </div>
-        <div className="flex justify-end gap-2 mt-5">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button onClick={() => onSave({ ...form, id: form.id || uid(), value: Number(form.value) || 0, clientName: clientName(form.clientId) })} className="px-4 py-2 text-sm rounded-lg bg-accent text-white hover:bg-accent-light">Save Deal</button>
+        <div className="flex items-center justify-between mt-5">
+          <div>{deal && <button onClick={() => { if(confirm('Delete this deal?')) onDelete(deal.id); }} className="px-4 py-2 text-sm rounded-lg text-red-600 hover:bg-red-50">Delete</button>}</div>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg text-slate-600 hover:bg-slate-100">Cancel</button>
+            <button onClick={() => onSave({ ...form, id: form.id || uid(), value: Number(form.value) || 0, clientName: clientName(form.clientId) })} className="px-4 py-2 text-sm rounded-lg bg-accent text-white hover:bg-accent-light">Save Deal</button>
+          </div>
         </div>
       </div>
     </div>
@@ -475,6 +478,11 @@ function Pipeline({ deals, setDeals, clients, addActivity, hideClosedDeals }) {
     upsertDeal(d);
     setModal(null);
   }
+  function deleteDeal(id) {
+    setDeals(deals.filter(d => d.id !== id));
+    deleteDealRow(id);
+    setModal(null);
+  }
 
   return (
     <div className="space-y-5 fade-in">
@@ -510,7 +518,7 @@ function Pipeline({ deals, setDeals, clients, addActivity, hideClosedDeals }) {
           );
         })}
       </div>
-      {modal !== null && <DealModal deal={modal.id ? modal : null} clients={clients} onClose={() => setModal(null)} onSave={saveDeal} />}
+      {modal !== null && <DealModal deal={modal.id ? modal : null} clients={clients} onClose={() => setModal(null)} onSave={saveDeal} onDelete={deleteDeal} />}
     </div>
   );
 }
