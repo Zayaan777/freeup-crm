@@ -1,50 +1,5 @@
 const { useState, useEffect, useMemo, useRef } = React;
 
-// ---------- GitHub sync ----------
-const GH_REPO = 'Zayaan777/freeup-crm';
-const GH_FILE = 'leads.csv';
-
-async function appendToLeadsCSV(client) {
-  const token = localStorage.getItem('freeup_gh_token');
-  if (!token) return;
-  try {
-    const res = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`, {
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
-    });
-    const data = await res.json();
-    const current = atob(data.content.replace(/\n/g, ''));
-    const notes = (client.notes || '').replace(/,/g, ';');
-    const newRow = `\n${client.name},${client.email || ''},${client.phone || ''},${client.service || ''},${client.amount || 0},${client.status || 'Prospect'},${notes}`;
-    const updated = btoa(unescape(encodeURIComponent(current + newRow)));
-    await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`, {
-      method: 'PUT',
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: `Add client: ${client.name}`, content: updated, sha: data.sha })
-    });
-  } catch(e) { console.error('GitHub sync failed', e); }
-}
-
-async function removeFromLeadsCSV(clientName) {
-  const token = localStorage.getItem('freeup_gh_token');
-  if (!token) return;
-  try {
-    const res = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`, {
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
-    });
-    const data = await res.json();
-    const current = atob(data.content.replace(/\n/g, ''));
-    const filtered = current.split('\n').filter(line => {
-      const name = line.split(',')[0].trim().toLowerCase();
-      return name !== clientName.toLowerCase() && line.trim() !== '';
-    }).join('\n');
-    const updated = btoa(unescape(encodeURIComponent(filtered + '\n')));
-    await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`, {
-      method: 'PUT',
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: `Remove client: ${clientName}`, content: updated, sha: data.sha })
-    });
-  } catch(e) { console.error('GitHub sync failed', e); }
-}
 const {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
@@ -84,6 +39,47 @@ const STAGE_COLORS = ['#94A3B8', '#3B82F6', '#F59E0B', '#14B8A6', '#EF4444'];
 
 function fmtMoney(n, cur) { return `${cur}${Number(n || 0).toLocaleString()}`; }
 
+// ---------- Login ----------
+function Login() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (error) setError(error.message);
+  }
+
+  return (
+    <div className="min-h-screen bg-navy-900 flex items-center justify-center p-4">
+      <form onSubmit={handleLogin} className="bg-white rounded-xl p-8 shadow-xl w-full max-w-sm space-y-4">
+        <div className="text-center mb-2">
+          <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center font-bold text-white mx-auto mb-3">F</div>
+          <h1 className="text-lg font-semibold text-slate-800">FreeUp AI Agency</h1>
+          <p className="text-sm text-slate-500">Sign in to your CRM</p>
+        </div>
+        {error && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+        <div>
+          <label className="text-sm font-medium text-slate-600">Email</label>
+          <input type="email" required className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent" value={email} onChange={e => setEmail(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-slate-600">Password</label>
+          <input type="password" required className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent" value={password} onChange={e => setPassword(e.target.value)} />
+        </div>
+        <button type="submit" disabled={loading} className="w-full bg-accent text-white py-2.5 rounded-lg text-sm font-medium hover:bg-accent-light transition-colors disabled:opacity-60">
+          {loading ? 'Signing in...' : 'Sign In'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 // ---------- Sidebar ----------
 function Sidebar({ page, setPage, agencyName, logo }) {
   const items = [
@@ -113,8 +109,9 @@ function Sidebar({ page, setPage, agencyName, logo }) {
           </button>
         ))}
       </nav>
-      <div className="px-6 py-4 text-xs text-slate-500 border-t border-white/10">
-        Leicester, UK · AI Automation
+      <div className="px-6 py-4 border-t border-white/10 space-y-2">
+        <div className="text-xs text-slate-500">Leicester, UK · AI Automation</div>
+        <button onClick={() => supabase.auth.signOut()} className="text-xs text-slate-400 hover:text-white transition-colors">Sign out</button>
       </div>
     </div>
   );
@@ -315,18 +312,19 @@ function Clients({ clients, setClients, addActivity }) {
     const exists = clients.some(x => x.id === c.id);
     let next;
     if (exists) next = clients.map(x => x.id === c.id ? c : x);
-    else { next = [c, ...clients]; addActivity(`Added new client: ${c.name}`); appendToLeadsCSV(c); }
+    else { next = [c, ...clients]; addActivity(`Added new client: ${c.name}`); }
     setClients(next);
+    upsertClient(c);
     setModal(null);
   }
   function deleteClient(id) {
-    const client = clients.find(c => c.id === id);
-    if (client) removeFromLeadsCSV(client.name);
     setClients(clients.filter(c => c.id !== id));
     setSelected(selected.filter(s => s !== id));
+    deleteClientRow(id);
   }
   function bulkDelete() {
     setClients(clients.filter(c => !selected.includes(c.id)));
+    deleteClientRows(selected);
     setSelected([]);
   }
   function exportCSV() {
@@ -463,14 +461,18 @@ function Pipeline({ deals, setDeals, clients, addActivity, hideClosedDeals }) {
   const stages = hideClosedDeals ? STAGES.filter(s => !s.startsWith('Closed')) : STAGES;
 
   function moveDeal(id, stage) {
-    setDeals(deals.map(d => d.id === id ? { ...d, stage, daysInStage: 0 } : d));
     const moved = deals.find(d => d.id === id);
-    if (moved && stage === 'Closed Won') addActivity(`Deal closed won with ${moved.clientName}`);
+    if (!moved) return;
+    const updated = { ...moved, stage, daysInStage: 0 };
+    setDeals(deals.map(d => d.id === id ? updated : d));
+    upsertDeal(updated);
+    if (stage === 'Closed Won') addActivity(`Deal closed won with ${moved.clientName}`);
   }
   function saveDeal(d) {
     const exists = deals.some(x => x.id === d.id);
     if (exists) setDeals(deals.map(x => x.id === d.id ? d : x));
     else { setDeals([d, ...deals]); addActivity(`New deal created for ${d.clientName}`); }
+    upsertDeal(d);
     setModal(null);
   }
 
@@ -609,12 +611,9 @@ function Analytics({ clients, deals, settings }) {
 // ---------- Settings Page ----------
 function Settings({ settings, setSettings }) {
   const [form, setForm] = useState(settings);
-  const [ghToken, setGhToken] = useState(localStorage.getItem('freeup_gh_token') || '');
   const fileRef = useRef();
   function save() {
     setSettings(form);
-    if (ghToken) localStorage.setItem('freeup_gh_token', ghToken);
-    else localStorage.removeItem('freeup_gh_token');
   }
   function handleLogo(e) {
     const file = e.target.files[0];
@@ -662,11 +661,6 @@ function Settings({ settings, setSettings }) {
           <label className="text-sm font-medium text-slate-600">Email Signature Template</label>
           <textarea rows={4} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent" value={form.emailSignature} onChange={e => setForm({ ...form, emailSignature: e.target.value })} />
         </div>
-        <div>
-          <label className="text-sm font-medium text-slate-600">GitHub Token (for leads.csv sync)</label>
-          <p className="text-xs text-slate-400 mt-0.5">Paste your GitHub personal access token here. Stored locally in your browser only — never sent to any server except GitHub.</p>
-          <input type="password" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent font-mono" placeholder="ghp_..." value={ghToken} onChange={e => setGhToken(e.target.value)} />
-        </div>
         <div className="flex items-center justify-between border-t border-slate-100 pt-4">
           <div>
             <div className="text-sm font-medium text-slate-700">Show closed deals in pipeline</div>
@@ -686,73 +680,46 @@ function Settings({ settings, setSettings }) {
 }
 
 // ---------- App Root ----------
-function parseLeadsCSV(text) {
-  const lines = text.trim().split('\n').filter(Boolean);
-  const headers = lines[0].split(',').map(h => h.trim());
-  return lines.slice(1).map(line => {
-    const cells = line.split(',').map(c => c.trim());
-    const row = {};
-    headers.forEach((h, i) => row[h] = cells[i] || '');
-    return row;
-  });
-}
-
-function App() {
-  const init = loadData();
+function CRM() {
   const [page, setPage] = useState('dashboard');
-  const [clients, setClientsState] = useState(init.clients);
-  const [deals, setDealsState] = useState(init.deals);
-  const [activity, setActivityState] = useState(init.activity);
-  const [settings, setSettingsState] = useState(init.settings);
+  const [clients, setClientsState] = useState([]);
+  const [deals, setDealsState] = useState([]);
+  const [activity, setActivityState] = useState([]);
+  const [settings, setSettingsState] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  function setClients(next) { setClientsState(next); saveClients(next); }
-  function setDeals(next) { setDealsState(next); saveDeals(next); }
-  function setSettings(next) { setSettingsState(next); saveSettings(next); }
-  function addActivity(text) {
-    const next = [{ id: uid(), text, time: new Date().toISOString().slice(0, 10) }, ...activity].slice(0, 20);
-    setActivityState(next); saveActivity(next);
+  async function refresh() {
+    const data = await loadData();
+    setClientsState(data.clients);
+    setDealsState(data.deals);
+    setActivityState(data.activity);
+    setSettingsState(data.settings);
+    setLoading(false);
+  }
+
+  function setClients(next) { setClientsState(next); }
+  function setDeals(next) { setDealsState(next); }
+  function setSettings(next) { setSettingsState(next); saveSettingsRow(next); }
+  async function addActivity(text) {
+    const row = await insertActivity(text);
+    setActivityState(prev => [row, ...prev].slice(0, 20));
   }
 
   useEffect(() => {
-    const token = localStorage.getItem('freeup_gh_token');
-    const url = token
-      ? `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`
-      : `https://raw.githubusercontent.com/${GH_REPO}/main/${GH_FILE}`;
-    const headers = token
-      ? { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
-      : {};
-    fetch(url, { headers })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!data) return;
-        const text = token ? atob(data.content.replace(/\n/g, '')) : data;
-        const rows = parseLeadsCSV(typeof text === 'string' ? text : JSON.stringify(text));
-        const csvNames = new Set(rows.filter(r => r.name).map(r => r.name.toLowerCase()));
-        // add new clients from CSV
-        const existingNames = new Set(clients.map(c => c.name.toLowerCase()));
-        const newClients = rows
-          .filter(r => r.name && !existingNames.has(r.name.toLowerCase()))
-          .map(r => ({
-            id: uid(),
-            name: r.name,
-            email: r.email || '',
-            phone: r.phone || '',
-            service: r.service || SERVICES[0],
-            amount: Number(r.amount) || 0,
-            status: r.status || 'Prospect',
-            date: new Date().toISOString().slice(0, 10),
-            notes: r.notes || '',
-          }));
-        // remove clients deleted from CSV (skip header row name "name")
-        const afterRemove = clients.filter(c => c.name.toLowerCase() === 'name' || csvNames.has(c.name.toLowerCase()));
-        const merged = [...newClients, ...afterRemove];
-        if (merged.length !== clients.length || newClients.length) {
-          setClients(merged);
-          newClients.forEach(c => addActivity(`Added new client from leads sheet: ${c.name}`));
-        }
-      })
-      .catch(() => {});
+    refresh();
+    // Live updates: if your partner adds/edits something, this pulls it in
+    // automatically without needing to refresh the page.
+    const unsubscribe = subscribeToChanges(() => refresh());
+    return unsubscribe;
   }, []);
+
+  if (loading || !settings) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-slate-400 text-sm">
+        Loading your CRM...
+      </div>
+    );
+  }
 
   return (
     <div className="flex">
@@ -766,6 +733,22 @@ function App() {
       </main>
     </div>
   );
+}
+
+// ---------- Auth gate ----------
+function App() {
+  const [session, setSession] = useState(undefined); // undefined = checking, null = logged out
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  if (session === undefined) {
+    return <div className="min-h-screen flex items-center justify-center text-slate-400 text-sm">Loading...</div>;
+  }
+  return session ? <CRM /> : <Login />;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
