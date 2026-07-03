@@ -40,6 +40,7 @@ async function deleteClientRows(ids) { await supabase.from('clients').delete().i
 
 // ---------- Deals ----------
 async function upsertDeal(deal) { await supabase.from('deals').upsert(dealToRow(deal)); }
+async function deleteDealRow(id) { await supabase.from('deals').delete().eq('id', id); }
 
 // ---------- Activity ----------
 async function insertActivity(text) {
